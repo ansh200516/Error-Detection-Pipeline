@@ -480,14 +480,17 @@ while True:
             if found:
                 break
         
-        for s in graph[current_puzzle][0].input_states:
-            if s.name == name:
-                state = s
-                found = True
-                break
+        
+        if not found:
+            for s in graph[current_puzzle][0].input_states:
+                if s.name == name:
+                    state = s
+                    found = True
+                    break
 
         if not found:
             print(colored(f'State {name} not found in puzzle {current_puzzle}.', 'red'))
+            continue
 
         attr = cmd.replace(f's{idx}.', '').strip()
         attr = attr.replace('cs', 'current_state') # shorthand

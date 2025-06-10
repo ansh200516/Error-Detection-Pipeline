@@ -142,7 +142,7 @@ class AlgorithmHeterogenousFOA(Algorithm):
         resampler = Resampler(randomness)
 
         # set the value of inital state
-        state = replace(state, value=self.origin*self.backtrack)
+        state = replace(state, value=self.origin*self.backtrack*self.backtrack)
 
 
         # log all agents
