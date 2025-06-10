@@ -301,7 +301,6 @@ class AgentReflectSciBench(Agent):
         previous_evaluation_score = state.values[state.step_n-1] if state.step_n > 0 else 0
         evaluation_score = state.values[state.step_n]
 
-        logger.info(f"State {state_enumerator.get_id(state)}: Value changed from {previous_evaluation_score} to {evaluation_score}, generating reflection")
         print(f"State {state_enumerator.get_id(state)}: Value changed from {previous_evaluation_score} to {evaluation_score},generating reflection")
         prompt = prompts.reflect.format(
             examples=examples_str,
@@ -319,7 +318,6 @@ class AgentReflectSciBench(Agent):
         )
 
         reflection_text = responses[0].strip()
-        logger.info(f"Generated reflection for state {state_enumerator.get_id(state)}")
         print(f"Generated reflection for state {state_enumerator.get_id(state)}")
         return reflection_text
     
@@ -399,7 +397,7 @@ class AgentValueReduceReflectSciBench(StateReturningAgent, ValueFunctionRequirin
         params: DecodingParameters,
         value_agent: AgentDict
     ) -> List[str]:
-        actions = await AgentReactSciBench.act(
+        actions = await AgentActSciBench.act(
             model=model,
             state=state,
             n=n,
@@ -478,7 +476,7 @@ class AgentValueReduceReflectSciBench(StateReturningAgent, ValueFunctionRequirin
             old_state_with_thought.reflections.insert(0, thoughts.pop(0))
 
             # TODO: Adjust the value of the state after reflection
-            new_value = state.value*1.1 # small increase in value for reflection
+            new_value = None # small increase in value for reflection
             new_states.append(replace(old_state_with_thought, value=new_value))
 
         return new_states

@@ -5,12 +5,13 @@ from typing import TypedDict, Optional
 from dataclasses import replace
 from ..typedefs import Algorithm, Model, AgentDict, Agent, StateReturningAgent, ValueFunctionRequiringAgent, ValueFunctionUsingAgent, Environment, DecodingParameters, State, Benchmark, MAX_SEED
 from ..utils import *
+import os
 
 logger = logging.getLogger('het_foa_logger')
 logger.setLevel(logging.INFO)
-handler = logging.FileHandler('logs/het_foa_logs.log')
-handler.setLevel(logging.INFO)
-logger.addHandler(handler)
+# handler = logging.FileHandler('logs/het_foa_logs.log')
+# handler.setLevel(logging.INFO)
+# logger.addHandler(handler)
 
 DEBUG = False  # Set to True to enable debug prints
 
@@ -52,6 +53,21 @@ class AlgorithmHeterogenousFOA(Algorithm):
         self.min_steps = min_steps
         self.num_evaluations = num_evaluations
         self.input_state_values = []
+
+        log_file = 'logs/het_foa.log'
+        for agent_dict in self.step_agents:
+            agent_name = agent_dict['agent'].__name__
+            if 'Reflect' in agent_name:
+                log_file = 'logs/het_foa_with_reflect.log'
+                break
+        
+        if logger.hasHandlers():
+            logger.handlers.clear()
+
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        handler = logging.FileHandler(log_file)
+        handler.setLevel(logging.INFO)
+        logger.addHandler(handler)
 
         logger.info('#################################################################')
 

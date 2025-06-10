@@ -53,11 +53,29 @@ def generate_distinct_hex_colors(n):
     return colors
 
 
-def load_logs() -> str:
-    with open(f"logs/het_foa_logs.log", 'r') as f:
-        logs = f.read()
-        logs = logs.split('#################################################################')[-1].strip()
-    return logs
+def load_interactive_log() -> str:
+    """
+    Loads the latest run from a single log file for interactive analysis.
+    It prioritizes 'het_foa_with_reflect.log'. 
+    The 'compair' command will still compare both log files independently.
+    """
+    # Prioritize with_reflect log for interactive analysis
+    log_files = ['logs/het_foa_with_reflect.log', 'logs/het_foa.log']
+    
+    for file_path in log_files:
+        try:
+            with open(file_path, 'r') as f:
+                content = f.read()
+                # Find the last major separator and take everything after it
+                last_run = re.split(r'#{50,}', content)[-1].strip()
+                if last_run:
+                    print(colored(f"Loading {file_path} for interactive analysis.", "cyan"))
+                    return last_run
+        except FileNotFoundError:
+            # This is not an error, one of the files might not exist yet
+            pass
+            
+    return ""
 
 
 def get_puzzle_idx(log):
@@ -183,7 +201,7 @@ def get_final_timestep(logs, timestep=0):
 
 
 # process the logs
-logs = load_logs()
+logs = load_interactive_log()
 logs = logs.split('\n')
 het_foa_logs = []
 fleet = []
@@ -419,6 +437,146 @@ def create_agent_diagrams(diagrams_data: List[dict], spacing: int = 50) -> Image
     return final_image
 
 
+def get_puzzle_statuses_from_file(log_path):
+    try:
+        with open(log_path, 'r') as f:
+            logs_content = re.split(r'#{50,}', f.read())[-1].strip()
+    except FileNotFoundError:
+        return {}
+    
+    _state_names = {}
+    _states_done_in_puzzle = {}
+    _state_colors = {}
+
+    def _state_name(current_state: str, index):
+        if hash(current_state) in _state_names:
+            return _state_names[hash(current_state)]
+        if index not in _states_done_in_puzzle:
+            _states_done_in_puzzle[index] = 1
+        _states_done_in_puzzle[index] += 1
+        idx = len(_state_names)
+        _state_names[hash(current_state)] = f's{idx}'
+        return _state_names[hash(current_state)]
+
+    def _get_state_color(state_name_str: str):
+        if state_name_str in _state_colors:
+            return _state_colors[state_name_str]
+        idx = len(_state_colors)
+        _state_colors[state_name_str] = f'color{idx}'
+        return _state_colors[state_name_str]
+
+    def _get_states_from_log(log):
+        index = get_puzzle_idx(log)
+        isolated_list = log[log.find('['):]
+        states = get_py_list(isolated_list, str)
+        
+        for i, state in enumerate(states):
+            if isinstance(state, str):
+                try:
+                    states[i] = json.loads(state)
+                except json.JSONDecodeError:
+                    raise ValueError(f'Invalid JSON in state: {state}')
+        
+        for i, state in enumerate(states):
+            s_name = _state_name(state['current_state'], index)
+            states[i] = State(
+                name=s_name,
+                color=_get_state_color(s_name),
+                num_thoughts=len(state['reflections']),
+                value=state['value'],
+                serial_data=state
+            )
+        return states
+    
+    def _get_timestep_object(logs, timestep=0):
+        assert re.search(r'het_foa_logs-\d+-\d+-agentinputs', logs[0]), f'First log does not match expected format: {logs[0]}'
+        assert re.search(r'het_foa_logs-\d+-\d+-agentouts', logs[1]), f'Second log does not match expected format: {logs[1]}'
+        assert re.search(r'het_foa_logs-\d+-\d+-statewins', logs[2]), f'Third log does not match expected format: {logs[2]}'
+        if len(logs) > 3: assert re.search(r'het_foa_logs-\d+-\d+-statefails', logs[3]), f'4th log does not match expected format: {logs[3]}'
+        if len(logs) > 4: assert re.search(r'het_foa_logs-\d+-\d+-agentreplacements', logs[4]), f'5th log does not match expected format: {logs[4]}'
+        if len(logs) > 5: assert re.search(r'het_foa_logs-\d+-\d+-values', logs[5]), f'6th log does not match expected format: {logs[5]}'
+
+        win_list = get_py_list(logs[2].split('statewins: ')[-1].strip(), bool)
+
+        return Timestep(
+            timestep=timestep,
+            input_states=_get_states_from_log(logs[0]),
+            agent_output_states=_get_states_from_log(logs[1]),
+            state_wins=win_list,
+            state_fails=get_py_list(logs[3].split('statefails: ')[-1].strip(), bool) if len(logs) > 3 else [False] * len(win_list),
+            replacement_states=_get_states_from_log(logs[4]) if len(logs) > 4 else [],
+            values=get_py_list(logs[5].split('values: ')[-1].strip(), float) if len(logs) > 5 else None
+        )
+
+    def _get_final_timestep(logs, timestep=0):
+        assert len(logs) == 5, f'Expected 5 logs for a timestep, got {len(logs)}: {logs}'
+
+        assert re.search(r'het_foa_logs-\d+-\d+-agentinputs', logs[0]), f'First log does not match expected format: {logs[0]}'
+        assert re.search(r'het_foa_logs-\d+-\d+-agentouts', logs[1]), f'Second log does not match expected format: {logs[1]}'
+        assert re.search(r'het_foa_logs-\d+-\d+-statewins', logs[2]), f'Third log does not match expected format: {logs[2]}'
+        assert re.search(r'het_foa_logs-\d+-\d+-statefails', logs[3]), f'4th log does not match expected format: {logs[3]}'
+        assert re.search(r'het_foa_logs-\d+-\d+-agentreplacements', logs[4]), f'5th log does not match expected format: {logs[4]}'
+
+        return Timestep(
+            timestep=timestep,
+            input_states=_get_states_from_log(logs[0]),
+            agent_output_states=_get_states_from_log(logs[1]),
+            state_wins=get_py_list(logs[2].split('statewins: ')[-1].strip(), bool),
+            state_fails=get_py_list(logs[3].split('statefails: ')[-1].strip(), bool),
+            replacement_states=_get_states_from_log(logs[4]),
+            values=None
+        )
+    
+    _logs = logs_content.split('\n')
+    _het_foa_logs = []
+    _fleet = []
+    for log in _logs:
+        if 'het_foa_logs' in log:
+            if '-fleet:' in log:
+                if len(_fleet) == 0:
+                    _fleet = get_fleet(log)
+                else:
+                    assert _fleet == get_fleet(log), f'Fleet mismatch in log: {log} and {_fleet=}'
+            else:
+                _het_foa_logs.append('het_foa_logs: ' + log.split('het_foa_logs: ')[-1].strip())
+
+    _puzzles = set()
+    for log in _het_foa_logs:
+        _puzzles.add(get_puzzle_idx(log))
+
+    _puzzles = {
+        pid: []
+        for pid in list(_puzzles)
+    }
+
+    for log in _het_foa_logs:
+        puzzle_idx = get_puzzle_idx(log)
+        _puzzles[puzzle_idx].append(log)
+
+    _graph: Dict[int, List[Timestep]] = {}
+    for puzzle_idx, logs_for_puzzle in _puzzles.items():
+        _graph[puzzle_idx] = []
+        t = 0
+        while len(logs_for_puzzle) > 0:
+            if len(logs_for_puzzle) == 5:
+                timestep = _get_final_timestep(logs_for_puzzle, t)
+                logs_for_puzzle = logs_for_puzzle[5:]
+            else:
+                timestep = _get_timestep_object(logs_for_puzzle[:6], t)
+                logs_for_puzzle = logs_for_puzzle[6:]
+            _graph[puzzle_idx].append(timestep)
+            t += 1
+    
+    statuses = {}
+    for puzzle_idx, timesteps in _graph.items():
+        if timesteps:
+                statuses[puzzle_idx] = 'Won' if any(timesteps[-1].state_wins) else 'Failed'
+        else:
+                statuses[puzzle_idx] = 'Failed'
+    
+    return statuses
+
+
 current_puzzle = None
 while True:
     cmd = input('>>> ')
@@ -428,6 +586,27 @@ while True:
 
     if cmd == 'clear':
         os.system('cls' if os.name == 'nt' else 'clear')
+        continue
+
+    if cmd == 'compare':
+        statuses_no_reflect = get_puzzle_statuses_from_file('logs/het_foa.log')
+        statuses_with_reflect = get_puzzle_statuses_from_file('logs/het_foa_with_reflect.log')
+        
+        all_puzzle_ids = sorted(list(set(statuses_no_reflect.keys()) | set(statuses_with_reflect.keys())))
+        
+        for puzzle_idx in all_puzzle_ids:
+            status_no_reflect = statuses_no_reflect.get(puzzle_idx, 'Not found')
+            status_with_reflect = statuses_with_reflect.get(puzzle_idx, 'Not found')
+            
+            status_no_reflect_colored = colored(status_no_reflect, 'green') if status_no_reflect == 'Won' else colored(status_no_reflect, 'red')
+            if status_no_reflect == 'Not found':
+                status_no_reflect_colored = colored(status_no_reflect, 'yellow')
+
+            status_with_reflect_colored = colored(status_with_reflect, 'green') if status_with_reflect == 'Won' else colored(status_with_reflect, 'red')
+            if status_with_reflect == 'Not found':
+                status_with_reflect_colored = colored(status_with_reflect, 'yellow')
+
+            print(f'Puzzle {puzzle_idx}: {status_no_reflect_colored} {colored("->", "yellow")} {status_with_reflect_colored}')
         continue
 
     if cmd.startswith('open '):
