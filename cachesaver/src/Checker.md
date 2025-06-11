@@ -27,15 +27,5 @@ graph TD;
   A3 --> A3b
 ```
 
-Checker:
--> Hallucinations:
-    > LLM (with function calling) as a judge.
-    > Whole trace will be given.
--> Unfaithful Reasoning:
-    > Check if deductions are correct or not.
-    > LLM (with function calling) will be used as a judge.
-    > Whole trace will be given.
--> Flawed Code:
-    > Run the code in an interpreter and fetch errors from there.
-    > Ground truth unit tests will be used for cross cheking accuracy.
+
     
