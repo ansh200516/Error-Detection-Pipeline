@@ -7,12 +7,25 @@ from PIL import Image, ImageDraw, ImageFont
 import random
 import os
 from termcolor import colored
+import builtins
 
 # these will be given by the user
 logs = ''
 state_names = {}
 states_done_in_puzzle = {}
 state_colors = {}
+
+# ---------------------------------------------------------------------------
+# IMPORT-ONLY MODE GUARD
+# ---------------------------------------------------------------------------
+# When this module is imported by other code (e.g. errtst.py) we don't want the
+# heavy interactive CLI at the bottom to spin up.  Setting the environment
+# variable VISUALISE_HET_FOA_IMPORT_ONLY=1 (done automatically by errtst.py)
+# replaces `input` with a stub that immediately raises EOFError, causing the
+# CLI loop to exit without side-effects.
+
+if os.environ.get("VISUALISE_HET_FOA_IMPORT_ONLY") == "1":
+    builtins.input = lambda *_, **__: (_ for _ in ()).throw(EOFError)
 
 class State(BaseModel):
     name: str
